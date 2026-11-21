@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 import CarnetQRCard from '../components/CarnetQRCard';
 import SemaforoBadge from '../components/SemaforoBadge';
 import GraficaAnilloAsistencia from '../components/GraficaAnilloAsistencia';
@@ -8,15 +9,27 @@ export default function PortalEstudiantePage() {
   const [expediente, setExpediente] = useState(null);
   const [cargando, setCargando] = useState(true);
 
-  useEffect(() => {
+  const cargarExpediente = useCallback((silencioso = false) => {
+    if (!silencioso) setCargando(true);
     api
       .get('/portal/estudiante')
       .then((res) => {
         if (res.data?.expediente) setExpediente(res.data.expediente);
       })
       .catch(() => {})
-      .finally(() => setCargando(false));
+      .finally(() => {
+        if (!silencioso) setCargando(false);
+      });
   }, []);
+
+  useEffect(() => {
+    cargarExpediente(false);
+  }, [cargarExpediente]);
+
+  useActualizacionEnVivo(
+    ['asistencia', 'conducta', 'academico', 'carnets', 'permisos', 'retiros'],
+    () => cargarExpediente(true)
+  );
 
   if (cargando) {
     return <div className="py-12 text-center text-slate-500 text-sm">Cargando...</div>;

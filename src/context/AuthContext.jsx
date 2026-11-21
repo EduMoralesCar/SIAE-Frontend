@@ -1,12 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../api/client';
+import api, { limpiarCacheCliente } from '../api/client';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => {
+    try {
+      // Limpiar llaves heredadas de localStorage para garantizar aislamiento real por pestaña
+      localStorage.removeItem('siae_token');
+      localStorage.removeItem('siae_usuario');
+      return sessionStorage.getItem('siae_token') || null;
+    } catch {
+      return null;
+    }
+  });
+
   const [usuario, setUsuario] = useState(() => {
     try {
-      const saved = localStorage.getItem('siae_usuario');
+      const saved = sessionStorage.getItem('siae_usuario');
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -14,20 +25,30 @@ export function AuthProvider({ children }) {
   });
   const [cargando, setCargando] = useState(false);
 
+  // Mostrar el rol activo en el título de la pestaña del navegador para distinguir perfiles fácilmente
   useEffect(() => {
-    const token = localStorage.getItem('siae_token');
-    if (token && !usuario) {
+    if (usuario?.rol) {
+      document.title = `SIAE · ${usuario.rol} (${usuario.nombres?.split(' ')[0] || ''})`;
+    } else {
+      document.title = 'SIAE — Gestión y Seguimiento Escolar QR';
+    }
+  }, [usuario?.rol, usuario?.nombres]);
+
+  useEffect(() => {
+    const savedToken = sessionStorage.getItem('siae_token');
+    if (savedToken && !usuario) {
       api
         .get('/auth/perfil')
         .then((res) => {
           if (res.data?.usuario) {
             setUsuario(res.data.usuario);
-            localStorage.setItem('siae_usuario', JSON.stringify(res.data.usuario));
+            sessionStorage.setItem('siae_usuario', JSON.stringify(res.data.usuario));
           }
         })
         .catch(() => {
-          localStorage.removeItem('siae_token');
-          localStorage.removeItem('siae_usuario');
+          sessionStorage.removeItem('siae_token');
+          sessionStorage.removeItem('siae_usuario');
+          setToken(null);
           setUsuario(null);
         });
     }
@@ -36,9 +57,11 @@ export function AuthProvider({ children }) {
   const iniciarSesion = async (identificador, password) => {
     setCargando(true);
     try {
+      limpiarCacheCliente();
       const { data } = await api.post('/auth/login', { identificador, password });
-      localStorage.setItem('siae_token', data.token);
-      localStorage.setItem('siae_usuario', JSON.stringify(data.usuario));
+      sessionStorage.setItem('siae_token', data.token);
+      sessionStorage.setItem('siae_usuario', JSON.stringify(data.usuario));
+      setToken(data.token);
       setUsuario(data.usuario);
       return { ok: true, usuario: data.usuario };
     } catch (err) {
@@ -54,13 +77,15 @@ export function AuthProvider({ children }) {
   };
 
   const cerrarSesion = () => {
-    localStorage.removeItem('siae_token');
-    localStorage.removeItem('siae_usuario');
+    limpiarCacheCliente();
+    sessionStorage.removeItem('siae_token');
+    sessionStorage.removeItem('siae_usuario');
+    setToken(null);
     setUsuario(null);
   };
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, iniciarSesion, cerrarSesion }}>
+    <AuthContext.Provider value={{ usuario, token, cargando, iniciarSesion, cerrarSesion }}>
       {children}
     </AuthContext.Provider>
   );
