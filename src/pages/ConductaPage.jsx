@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 import SemaforoBadge from '../components/SemaforoBadge';
 import SelectorEstudiante from '../components/SelectorEstudiante';
 import { exportarActaPDF } from '../utils/exportadores';
@@ -109,8 +110,8 @@ export default function ConductaPage() {
     fecha_seguimiento: new Date(Date.now() + 86400000 * 14).toISOString().slice(0, 10),
   });
 
-  const cargarTodo = async () => {
-    setCargando(true);
+  const cargarTodo = async (silencioso = false) => {
+    if (!silencioso) setCargando(true);
     try {
       const resEst = await api.get('/estudiantes');
       if (resEst.data?.estudiantes) {
@@ -166,13 +167,18 @@ export default function ConductaPage() {
     } catch {
       // Ignorar
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   };
 
   useEffect(() => {
-    cargarTodo();
+    cargarTodo(false);
   }, [tab]);
+
+  useActualizacionEnVivo(
+    ['conducta', 'citaciones', 'reuniones', 'actas', 'compromisos', 'reportes'],
+    () => cargarTodo(true)
+  );
 
   // Handlers de Incidencia
   const handleRegistrarIncidencia = async (e) => {

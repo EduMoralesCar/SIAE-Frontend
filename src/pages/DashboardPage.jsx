@@ -12,6 +12,7 @@ import {
   FileCheck2,
 } from 'lucide-react';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 
 /**
  * 1. Gráfica de Anillo (Donut Chart SVG) con etiquetas limpias y porcentaje central
@@ -550,8 +551,12 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [citandoId, setCitandoId] = useState(null);
 
-  const cargarDashboard = async (fecha = fechaFiltro, seccionId = gradoSeccionId) => {
-    setCargando(true);
+  const cargarDashboard = async (
+    fecha = fechaFiltro,
+    seccionId = gradoSeccionId,
+    silencioso = false
+  ) => {
+    if (!silencioso) setCargando(true);
     setError('');
     try {
       const { data } = await api.get('/reportes/dashboard', {
@@ -567,15 +572,34 @@ export default function DashboardPage() {
         }
       }
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'No se pudo cargar la información del panel.');
+      if (!silencioso) {
+        setError(err.response?.data?.mensaje || 'No se pudo cargar la información del panel.');
+      }
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   };
 
   useEffect(() => {
     cargarDashboard('', '');
   }, []);
+
+  useActualizacionEnVivo(
+    [
+      'asistencia',
+      'salud',
+      'retiros',
+      'permisos',
+      'conducta',
+      'citaciones',
+      'reuniones',
+      'actas',
+      'compromisos',
+      'usuarios',
+      'reportes',
+    ],
+    () => cargarDashboard(fechaFiltro, gradoSeccionId, true)
+  );
 
   const handleCitarApoderado = async (estudianteId, motivo) => {
     setCitandoId(estudianteId);

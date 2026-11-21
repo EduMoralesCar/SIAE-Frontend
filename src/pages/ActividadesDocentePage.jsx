@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 
 export default function ActividadesDocentePage() {
   const [grados, setGrados] = useState([]);
@@ -46,6 +47,8 @@ export default function ActividadesDocentePage() {
   useEffect(() => {
     cargarDatos();
   }, [gradoSeccionId]);
+
+  useActualizacionEnVivo(['academico', 'asistencia'], () => cargarDatos());
 
   const handleCrearActividad = async (e) => {
     e.preventDefault();

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 import SelectorEstudiante from '../components/SelectorEstudiante';
 
 function convertirArchivoABase64(file) {
@@ -82,8 +83,8 @@ export default function SaludRetirosPermisosPage() {
   const [mensajeExito, setMensajeExito] = useState('');
   const [mensajeError, setMensajeError] = useState('');
 
-  const cargarDatos = async () => {
-    setCargando(true);
+  const cargarDatos = async (silencioso = false) => {
+    if (!silencioso) setCargando(true);
     try {
       const resEst = await api.get('/estudiantes');
       const lista = resEst.data?.estudiantes || [];
@@ -129,13 +130,17 @@ export default function SaludRetirosPermisosPage() {
     } catch {
       // Ignorar
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   };
 
   useEffect(() => {
-    cargarDatos();
+    cargarDatos(false);
   }, [tab]);
+
+  useActualizacionEnVivo(['salud', 'retiros', 'permisos', 'autorizaciones', 'asistencia'], () =>
+    cargarDatos(true)
+  );
 
   const seleccionarEstudianteParaRetiro = (estId, listaEst = estudiantes, listaAut = autorizaciones) => {
     const est = listaEst.find((e) => String(e.id) === String(estId));

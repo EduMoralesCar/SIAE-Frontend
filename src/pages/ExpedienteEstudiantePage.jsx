@@ -13,6 +13,7 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 import SelectorEstudiante from '../components/SelectorEstudiante';
 
 export default function ExpedienteEstudiantePage() {
@@ -38,9 +39,9 @@ export default function ExpedienteEstudiantePage() {
       .catch(() => {});
   }, []);
 
-  const cargarLineaTiempo = async () => {
+  const cargarLineaTiempo = async (silencioso = false) => {
     if (!estudianteId) return;
-    setCargando(true);
+    if (!silencioso) setCargando(true);
     try {
       const { data } = await api.get(`/estudiantes/${estudianteId}/linea-tiempo`, {
         params: {
@@ -56,13 +57,15 @@ export default function ExpedienteEstudiantePage() {
     } catch {
       // Ignorar
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   };
 
   useEffect(() => {
-    cargarLineaTiempo();
+    cargarLineaTiempo(false);
   }, [estudianteId, anioFiltro, categoriaFiltro]);
+
+  useActualizacionEnVivo(['*'], () => cargarLineaTiempo(true));
 
   const exportarHistorialPDF = () => {
     if (!estudianteDetalle) return;
