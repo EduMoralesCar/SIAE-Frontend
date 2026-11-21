@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -22,9 +22,12 @@ import {
   Clock,
   Sun,
   Moon,
+  ExternalLink,
+  Radio,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useSocket } from '../context/SocketContext';
 import api from '../api/client';
 
 const MENU_POR_ROL = {
@@ -93,14 +96,23 @@ const MENU_POR_ROL = {
 export default function Layout({ children }) {
   const { usuario, cerrarSesion } = useAuth();
   const { esOscuro, alternarTema } = useTheme();
+  const {
+    conectado,
+    presencia,
+    toasts,
+    descartarToast,
+    suscribirNotificacion,
+  } = useSocket() || {};
   const navigate = useNavigate();
+
   const [menuMovilAbierto, setMenuMovilAbierto] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [notificaciones, setNotificaciones] = useState([]);
   const [noLeidas, setNoLeidas] = useState(0);
   const [panelNotif, setPanelNotif] = useState(false);
+  const [panelPresencia, setPanelPresencia] = useState(false);
 
-  const cargarNotificaciones = async () => {
+  const cargarNotificaciones = useCallback(async () => {
     try {
       const { data } = await api.get('/notificaciones');
       if (data.ok) {
@@ -110,13 +122,19 @@ export default function Layout({ children }) {
     } catch {
       // Ignorar
     }
-  };
+  }, []);
 
   useEffect(() => {
     cargarNotificaciones();
-    const timer = setInterval(cargarNotificaciones, 20000);
-    return () => clearInterval(timer);
-  }, [usuario?.id]);
+  }, [usuario?.id, cargarNotificaciones]);
+
+  // Recargar campana al instante cuando llega una notificación por WebSocket
+  useEffect(() => {
+    if (!suscribirNotificacion) return undefined;
+    return suscribirNotificacion(() => {
+      cargarNotificaciones();
+    });
+  }, [suscribirNotificacion, cargarNotificaciones]);
 
   const handleMarcarLeidas = async () => {
     try {
@@ -133,7 +151,13 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
+  // noopener garantiza un sessionStorage vacío en la nueva pestaña para iniciar otro perfil
+  const handleAbrirOtroPerfil = () => {
+    window.open(`${window.location.origin}/login`, '_blank', 'noopener,noreferrer');
+  };
+
   const itemsMenu = MENU_POR_ROL[usuario?.rol] || [];
+  const totalActivos = presencia?.totalConexiones || (conectado ? 1 : 0);
 
   return (
     <div className="h-screen overflow-hidden flex bg-slate-50 text-slate-900">
@@ -145,7 +169,7 @@ export default function Layout({ children }) {
         />
       )}
 
-      {/* Barra lateral fija (altura 100vh, nunca se pierde al hacer scroll y se puede ocultar/mostrar) */}
+      {/* Barra lateral fija */}
       <aside
         className={`fixed inset-y-0 left-0 z-40 h-screen bg-white border-r border-slate-200 flex flex-col shrink-0 transition-all duration-200 lg:static ${
           menuMovilAbierto ? 'translate-x-0 w-60' : '-translate-x-full w-60'
@@ -216,7 +240,7 @@ export default function Layout({ children }) {
       {/* Columna derecha con su propio scroll interno */}
       <div className="flex-1 flex flex-col h-screen min-w-0 overflow-hidden">
         <header className="h-14 bg-white border-b border-slate-200 px-4 lg:px-6 flex items-center justify-between shrink-0 z-20">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
               onClick={() => setMenuMovilAbierto(true)}
@@ -248,12 +272,94 @@ export default function Layout({ children }) {
               </div>
             )}
 
-            <span className="text-xs font-medium text-slate-500">
+            <span className="text-xs font-medium text-slate-500 truncate">
               Gestión y Seguimiento Escolar QR
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Indicador WebSocket en Vivo + Perfiles Conectados */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setPanelPresencia((v) => !v);
+                  setPanelNotif(false);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-100 text-xs font-medium text-slate-700 transition"
+                title="Estado de conexión en tiempo real (WebSocket)"
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    conectado ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  }`}
+                />
+                <span className="hidden md:inline">
+                  {conectado ? 'En vivo' : 'Reconectando'}
+                </span>
+                {conectado && (
+                  <span className="text-[11px] text-slate-500 tabular-nums">
+                    · {totalActivos}
+                  </span>
+                )}
+              </button>
+
+              {panelPresencia && (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden z-50">
+                  <div className="px-3.5 py-2.5 border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-xs font-semibold text-slate-800">
+                        Sesiones en tiempo real ({totalActivos})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPanelPresencia(false)}
+                      className="text-slate-400 hover:text-slate-700 text-xs"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                  <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+                    {(!presencia?.rolesConectados || presencia.rolesConectados.length === 0) ? (
+                      <p className="text-xs text-slate-500 text-center py-2">
+                        Conectando al servidor en tiempo real...
+                      </p>
+                    ) : (
+                      presencia.rolesConectados.map((item) => (
+                        <div
+                          key={item.rol}
+                          className="p-2 rounded-md bg-slate-50 border border-slate-200 text-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-slate-900">{item.rol}</span>
+                            <span className="text-[11px] text-emerald-700 font-medium tabular-nums">
+                              {item.conexiones} {item.conexiones === 1 ? 'pestaña' : 'pestañas'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                            {item.usuarios.join(', ')}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Botón para abrir otro perfil en pestaña independiente */}
+            <button
+              type="button"
+              onClick={handleAbrirOtroPerfil}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-medium transition"
+              title="Abrir otro rol o perfil en una pestaña independiente"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Otro perfil</span>
+            </button>
+
             {/* Botón Sol / Luna para alternar entre Modo Claro y Modo Oscuro */}
             <button
               type="button"
@@ -274,11 +380,13 @@ export default function Layout({ children }) {
               )}
             </button>
 
+            {/* Notificaciones en tiempo real */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => {
                   setPanelNotif(!panelNotif);
+                  setPanelPresencia(false);
                   if (noLeidas > 0) handleMarcarLeidas();
                 }}
                 className="relative p-2 rounded-md hover:bg-slate-100 text-slate-600 transition"
@@ -286,7 +394,9 @@ export default function Layout({ children }) {
               >
                 <Bell className="w-4 h-4" />
                 {noLeidas > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-600" />
+                  <span className="absolute top-1 right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center tabular-nums">
+                    {noLeidas > 9 ? '9+' : noLeidas}
+                  </span>
                 )}
               </button>
 
@@ -324,6 +434,42 @@ export default function Layout({ children }) {
           <div className="max-w-7xl w-full mx-auto">{children}</div>
         </main>
       </div>
+
+      {/* Notificaciones flotantes en tiempo real (WebSocket Toasts) */}
+      {toasts && toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className="bg-white border border-slate-300 rounded-lg shadow-lg p-3 flex items-start justify-between gap-2.5"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      t.tipo === 'ALERTA_CRITICA'
+                        ? 'bg-red-500'
+                        : t.tipo === 'CONDUCTA'
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    }`}
+                  />
+                  <p className="text-xs font-semibold text-slate-900 truncate">{t.titulo}</p>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1 leading-snug">{t.mensaje}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => descartarToast(t.id)}
+                className="text-slate-400 hover:text-slate-700 p-0.5 shrink-0"
+                aria-label="Cerrar alerta"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

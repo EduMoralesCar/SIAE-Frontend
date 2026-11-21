@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ExternalLink, Plus } from 'lucide-react';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 import SelectorEstudiante from '../components/SelectorEstudiante';
 
 export default function AsistenciasAuditoriaPage() {
@@ -22,8 +23,8 @@ export default function AsistenciasAuditoriaPage() {
   const [evidenciaUrl, setEvidenciaUrl] = useState('');
   const [guardando, setGuardando] = useState(false);
 
-  const cargarDatos = async () => {
-    setCargando(true);
+  const cargarDatos = async (silencioso = false) => {
+    if (!silencioso) setCargando(true);
     try {
       const [resAsis, resAud, resGrados, resEst] = await Promise.all([
         api.get('/asistencias', {
@@ -49,13 +50,15 @@ export default function AsistenciasAuditoriaPage() {
     } catch {
       // Ignorar
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   };
 
   useEffect(() => {
-    cargarDatos();
+    cargarDatos(false);
   }, [fechaFiltro, gradoSeccionId, estadoFiltro]);
+
+  useActualizacionEnVivo(['asistencia', 'permisos', 'retiros'], () => cargarDatos(true));
 
   const abrirModalJustificar = (reg) => {
     setModoManualNuevo(false);

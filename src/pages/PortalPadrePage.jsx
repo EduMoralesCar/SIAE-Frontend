@@ -10,6 +10,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import api from '../api/client';
+import { useActualizacionEnVivo } from '../context/SocketContext';
 import CarnetQRCard from '../components/CarnetQRCard';
 import SemaforoBadge from '../components/SemaforoBadge';
 import GraficaAnilloAsistencia from '../components/GraficaAnilloAsistencia';
@@ -83,9 +84,26 @@ export default function PortalPadrePage() {
 
   useEffect(() => {
     cargarPortal(false);
-    const interval = setInterval(() => cargarPortal(true), 20000);
-    return () => clearInterval(interval);
   }, []);
+
+  useActualizacionEnVivo(
+    [
+      'asistencia',
+      'salud',
+      'retiros',
+      'permisos',
+      'autorizaciones',
+      'conducta',
+      'citaciones',
+      'reuniones',
+      'actas',
+      'compromisos',
+      'academico',
+      'carnets',
+      'reportes',
+    ],
+    () => cargarPortal(true)
+  );
 
   if (cargando) {
     return <div className="py-12 text-center text-slate-500 text-sm">Cargando portal...</div>;
