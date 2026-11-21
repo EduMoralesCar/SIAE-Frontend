@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+export const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL || API_URL.replace(/\/api\/?$/, '');
 
 const api = axios.create({
   baseURL: API_URL,
@@ -16,8 +18,9 @@ export function limpiarCacheCliente() {
   inFlightRequests.clear();
 }
 
+// Sesión aislada por pestaña (sessionStorage) para poder operar varios perfiles a la vez
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('siae_token');
+  const token = sessionStorage.getItem('siae_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -31,14 +34,14 @@ const rawPatch = api.patch.bind(api);
 const rawDelete = api.delete.bind(api);
 
 function construirCacheKey(url, config = {}) {
-  const token = localStorage.getItem('siae_token') || 'anon';
+  const token = sessionStorage.getItem('siae_token') || 'anon';
   const paramsStr = config.params ? JSON.stringify(config.params) : '';
   return `${token.slice(-16)}:${url}:${paramsStr}`;
 }
 
 api.get = async (url, config = {}) => {
-  // No cachear descargas binarias (blob)
-  if (config.responseType === 'blob') {
+  // No cachear descargas binarias (blob) ni buzón de notificaciones en tiempo real
+  if (config.responseType === 'blob' || String(url).includes('/notificaciones')) {
     return rawGet(url, config);
   }
 
