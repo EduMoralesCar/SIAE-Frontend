@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { ExternalLink, Plus } from 'lucide-react';
+import { ExternalLink, Plus, Trash2 } from 'lucide-react';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { useActualizacionEnVivo } from '../context/SocketContext';
 import SelectorEstudiante from '../components/SelectorEstudiante';
 
 export default function AsistenciasAuditoriaPage() {
+  const { usuario } = useAuth();
+  const puedeEliminar = usuario?.rol === 'ADMIN' || usuario?.rol === 'DIRECTOR';
   const [asistencias, setAsistencias] = useState([]);
   const [auditorias, setAuditorias] = useState([]);
   const [grados, setGrados] = useState([]);
@@ -94,8 +97,7 @@ export default function AsistenciasAuditoriaPage() {
           evidencia_url: evidenciaUrl || null,
         });
       } else if (registroSeleccionado) {
-        await api.post('/asistencias/justificar', {
-          asistencia_id: registroSeleccionado.id,
+        await api.put(`/asistencias/${registroSeleccionado.id}`, {
           estado_nuevo: estadoNuevo,
           motivo_cambio: motivoCambio,
           evidencia_url: evidenciaUrl || null,
@@ -107,6 +109,23 @@ export default function AsistenciasAuditoriaPage() {
       alert(err.response?.data?.mensaje || 'Error al registrar la justificación.');
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const handleEliminarRegistro = async (reg) => {
+    const nombreEst = `${reg.estudiante?.usuario?.apellidos || ''}, ${reg.estudiante?.usuario?.nombres || ''}`.trim();
+    const motivo = window.prompt(
+      `¿Eliminar el registro de asistencia del ${reg.fecha} (${reg.estado}) de ${nombreEst}?\n\nIngresa el motivo de eliminación (quedará registrado en auditoría):`,
+      'Registro duplicado o cargado por error'
+    );
+    if (motivo === null) return;
+    try {
+      await api.delete(`/asistencias/${reg.id}`, {
+        params: { motivo: motivo.trim() || 'Eliminación administrativa de registro' },
+      });
+      await cargarDatos();
+    } catch (err) {
+      alert(err.response?.data?.mensaje || 'No se pudo eliminar el registro de asistencia.');
     }
   };
 
@@ -236,13 +255,25 @@ export default function AsistenciasAuditoriaPage() {
                       {reg.motivo_justificacion || '—'}
                     </td>
                     <td className="py-2.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => abrirModalJustificar(reg)}
-                        className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium transition"
-                      >
-                        Modificar
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => abrirModalJustificar(reg)}
+                          className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium transition"
+                        >
+                          Modificar
+                        </button>
+                        {puedeEliminar && (
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarRegistro(reg)}
+                            title="Eliminar registro (auditado)"
+                            className="p-1.5 rounded border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
