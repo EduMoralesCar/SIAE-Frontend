@@ -10,6 +10,7 @@ export default function UsuariosConfigPage({ tabInicial = 'usuarios' }) {
   const [aniosEscolares, setAniosEscolares] = useState([]);
   const [matriculas, setMatriculas] = useState([]);
   const [auditoriaLogs, setAuditoriaLogs] = useState([]);
+  const [monitorData, setMonitorData] = useState(null);
 
   const [rolFiltro, setRolFiltro] = useState('');
   const [anioFiltroMatricula, setAnioFiltroMatricula] = useState('');
@@ -74,6 +75,12 @@ export default function UsuariosConfigPage({ tabInicial = 'usuarios' }) {
           },
         });
         if (resAud.data?.logs) setAuditoriaLogs(resAud.data.logs);
+        return;
+      }
+
+      if (tab === 'monitor') {
+        const resMon = await api.get('/monitor/logs', { params: { limite: 100 } });
+        if (resMon.data?.ok) setMonitorData(resMon.data);
         return;
       }
 
@@ -265,6 +272,18 @@ export default function UsuariosConfigPage({ tabInicial = 'usuarios' }) {
           }`}
         >
           Configuración Horaria
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab('monitor')}
+          className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+            tab === 'monitor'
+              ? 'bg-slate-900 text-white'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          Monitoreo y Logs API
         </button>
       </div>
 
@@ -963,6 +982,117 @@ export default function UsuariosConfigPage({ tabInicial = 'usuarios' }) {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* TAB 5: MONITOREO Y LOGS HTTP EN PRODUCCIÓN */}
+      {tab === 'monitor' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Monitoreo y registro de logs de la API
+              </h2>
+              <p className="text-xs text-slate-500">
+                Métricas operativas del servidor Express + WebSocket y traza HTTP en tiempo real
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={cargarTodo}
+              className="px-3 py-1.5 rounded-md border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium self-start"
+            >
+              Actualizar logs
+            </button>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-200">
+            <div className="p-3.5">
+              <p className="text-[11px] text-slate-500">Peticiones totales</p>
+              <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">
+                {monitorData?.metricas?.totalPeticiones ?? 0}
+              </p>
+            </div>
+            <div className="p-3.5">
+              <p className="text-[11px] text-slate-500">Latencia promedio</p>
+              <p className="text-lg font-semibold text-emerald-700 tabular-nums mt-0.5">
+                {monitorData?.metricas?.latenciaPromedioMs ?? 0} ms
+              </p>
+            </div>
+            <div className="p-3.5">
+              <p className="text-[11px] text-slate-500">Errores 4xx / 5xx</p>
+              <p className="text-lg font-semibold text-amber-600 tabular-nums mt-0.5">
+                {monitorData?.metricas?.errores4xx ?? 0} / {monitorData?.metricas?.errores5xx ?? 0}
+              </p>
+            </div>
+            <div className="p-3.5">
+              <p className="text-[11px] text-slate-500">Memoria RSS</p>
+              <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">
+                {monitorData?.memoriaMB ?? 0} MB
+              </p>
+            </div>
+            <div className="p-3.5">
+              <p className="text-[11px] text-slate-500">Tiempo activo</p>
+              <p className="text-lg font-semibold text-slate-900 tabular-nums mt-0.5">
+                {monitorData?.uptimeSegundos ?? 0} s
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-900 uppercase tracking-wide">
+                Últimas peticiones HTTP ({monitorData?.logs?.length || 0})
+              </span>
+              <span className="text-[11px] text-slate-500 font-mono">GET /api/monitor/logs</span>
+            </div>
+            <div className="overflow-x-auto max-h-[420px]">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 sticky top-0">
+                  <tr>
+                    <th className="py-2 px-3 font-medium">Fecha / Hora</th>
+                    <th className="py-2 px-3 font-medium">Nivel</th>
+                    <th className="py-2 px-3 font-medium">Método</th>
+                    <th className="py-2 px-3 font-medium">Endpoint</th>
+                    <th className="py-2 px-3 text-center font-medium">HTTP</th>
+                    <th className="py-2 px-3 text-right font-medium">Latencia</th>
+                    <th className="py-2 px-3 font-medium">Usuario</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(monitorData?.logs || []).map((log, i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      <td className="py-2 px-3 text-slate-500 whitespace-nowrap">{log.timestamp}</td>
+                      <td className="py-2 px-3">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                            log.nivel === 'ERROR'
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : log.nivel === 'WARN'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
+                          {log.nivel}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-slate-900">{log.metodo}</td>
+                      <td className="py-2 px-3 text-slate-700 max-w-xs truncate">{log.ruta}</td>
+                      <td className="py-2 px-3 text-center font-semibold text-slate-900">
+                        {log.estado}
+                      </td>
+                      <td className="py-2 px-3 text-right text-slate-600 tabular-nums">
+                        {log.duracion_ms} ms
+                      </td>
+                      <td className="py-2 px-3 text-slate-500 truncate max-w-[180px]">
+                        {log.usuario}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>
