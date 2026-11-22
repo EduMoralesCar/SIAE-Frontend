@@ -27,6 +27,22 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Interceptor de respuesta: detecta JWT expirado o inválido (HTTP 401) y cierra sesión de forma segura
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url = String(error?.config?.url || '');
+    if (status === 401 && !url.includes('/auth/login')) {
+      limpiarCacheCliente();
+      sessionStorage.removeItem('siae_token');
+      sessionStorage.removeItem('siae_usuario');
+      window.dispatchEvent(new CustomEvent('siae:sesion-expirada'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 const rawGet = api.get.bind(api);
 const rawPost = api.post.bind(api);
 const rawPut = api.put.bind(api);

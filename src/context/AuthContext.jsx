@@ -1,7 +1,21 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api, { limpiarCacheCliente } from '../api/client';
 
 const AuthContext = createContext(null);
+
+export function esTokenValido(token) {
+  if (!token || typeof token !== 'string') return false;
+  try {
+    const partes = token.split('.');
+    if (partes.length !== 3) return false;
+    const base64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(base64));
+    if (!payload?.exp) return true;
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => {
@@ -9,7 +23,13 @@ export function AuthProvider({ children }) {
       // Limpiar llaves heredadas de localStorage para garantizar aislamiento real por pestaña
       localStorage.removeItem('siae_token');
       localStorage.removeItem('siae_usuario');
-      return sessionStorage.getItem('siae_token') || null;
+      const savedToken = sessionStorage.getItem('siae_token');
+      if (savedToken && esTokenValido(savedToken)) {
+        return savedToken;
+      }
+      sessionStorage.removeItem('siae_token');
+      sessionStorage.removeItem('siae_usuario');
+      return null;
     } catch {
       return null;
     }
@@ -17,6 +37,8 @@ export function AuthProvider({ children }) {
 
   const [usuario, setUsuario] = useState(() => {
     try {
+      const savedToken = sessionStorage.getItem('siae_token');
+      if (!savedToken || !esTokenValido(savedToken)) return null;
       const saved = sessionStorage.getItem('siae_usuario');
       return saved ? JSON.parse(saved) : null;
     } catch {
@@ -24,6 +46,14 @@ export function AuthProvider({ children }) {
     }
   });
   const [cargando, setCargando] = useState(false);
+
+  const cerrarSesion = useCallback(() => {
+    limpiarCacheCliente();
+    sessionStorage.removeItem('siae_token');
+    sessionStorage.removeItem('siae_usuario');
+    setToken(null);
+    setUsuario(null);
+  }, []);
 
   // Mostrar el rol activo en el título de la pestaña del navegador para distinguir perfiles fácilmente
   useEffect(() => {
@@ -34,9 +64,35 @@ export function AuthProvider({ children }) {
     }
   }, [usuario?.rol, usuario?.nombres]);
 
+  // Escuchar evento global de sesión expirada (HTTP 401 del interceptor Axios)
+  useEffect(() => {
+    const onExpirada = () => {
+      cerrarSesion();
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login?expirada=1');
+      }
+    };
+    window.addEventListener('siae:sesion-expirada', onExpirada);
+    return () => window.removeEventListener('siae:sesion-expirada', onExpirada);
+  }, [cerrarSesion]);
+
+  // Verificación periódica de expiración del token JWT en cliente (cada 60s)
+  useEffect(() => {
+    if (!token) return undefined;
+    const interval = setInterval(() => {
+      if (!esTokenValido(token)) {
+        cerrarSesion();
+        if (window.location.pathname !== '/login') {
+          window.location.assign('/login?expirada=1');
+        }
+      }
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [token, cerrarSesion]);
+
   useEffect(() => {
     const savedToken = sessionStorage.getItem('siae_token');
-    if (savedToken && !usuario) {
+    if (savedToken && esTokenValido(savedToken) && !usuario) {
       api
         .get('/auth/perfil')
         .then((res) => {
@@ -46,13 +102,10 @@ export function AuthProvider({ children }) {
           }
         })
         .catch(() => {
-          sessionStorage.removeItem('siae_token');
-          sessionStorage.removeItem('siae_usuario');
-          setToken(null);
-          setUsuario(null);
+          cerrarSesion();
         });
     }
-  }, []);
+  }, [usuario, cerrarSesion]);
 
   const iniciarSesion = async (identificador, password) => {
     setCargando(true);
@@ -74,14 +127,6 @@ export function AuthProvider({ children }) {
     } finally {
       setCargando(false);
     }
-  };
-
-  const cerrarSesion = () => {
-    limpiarCacheCliente();
-    sessionStorage.removeItem('siae_token');
-    sessionStorage.removeItem('siae_usuario');
-    setToken(null);
-    setUsuario(null);
   };
 
   return (
