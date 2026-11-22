@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, GraduationCap, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -15,6 +15,8 @@ const ACCESOS_PRUEBA = [
 ];
 
 export default function LoginPage() {
+  const [searchParams] = useSearchParams();
+  const sesionExpirada = searchParams.get('expirada') === '1';
   const [identificador, setIdentificador] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -85,6 +87,13 @@ export default function LoginPage() {
             Sistema Integral de Gestión y Seguimiento Escolar QR
           </p>
         </div>
+
+        {sesionExpirada && !error && (
+          <div className="mb-4 p-3 rounded-md bg-amber-50 border border-amber-200 flex items-start gap-2 text-amber-800 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>Tu sesión expiró por seguridad. Vuelve a iniciar sesión para continuar.</span>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200 flex items-start gap-2 text-red-700 text-xs">
