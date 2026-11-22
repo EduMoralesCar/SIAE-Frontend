@@ -55,14 +55,14 @@ export function AuthProvider({ children }) {
     setUsuario(null);
   }, []);
 
-  // Mostrar el rol activo en el título de la pestaña del navegador para distinguir perfiles fácilmente
+  // Mostrar el rol activo en el título de la pestaña del navegador (ej. SIAE · ADMIN)
   useEffect(() => {
     if (usuario?.rol) {
-      document.title = `SIAE · ${usuario.rol} (${usuario.nombres?.split(' ')[0] || ''})`;
+      document.title = `SIAE · ${usuario.rol}`;
     } else {
       document.title = 'SIAE — Gestión y Seguimiento Escolar QR';
     }
-  }, [usuario?.rol, usuario?.nombres]);
+  }, [usuario?.rol]);
 
   // Escuchar evento global de sesión expirada (HTTP 401 del interceptor Axios)
   useEffect(() => {
